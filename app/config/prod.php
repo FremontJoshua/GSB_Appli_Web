@@ -7,8 +7,8 @@ $app['db.options'] = array(
 'charset'  => 'utf8',
 'host'     => 'localhost',
 'port'     => '3306',
-'dbname'   => 'seg_v0',
-'user'     => 'user_seg',
+'dbname'   => 'gsb_v0',
+'user'     => 'user_gsb',
 'password' => 'pwsio',
 );
 

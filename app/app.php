@@ -16,11 +16,7 @@ $app->register(new Silex\Provider\TwigServiceProvider(), array(
 ));
 
 // Register services.
-$app['dao.commune'] = function ($app) {
-    return new SEG\DAO\CommuneDAO($app['db']);
-};
-
-$app['dao.secteur'] = function ($app) {
-    return new SEG\DAO\SecteurDAO($app['db']);
+$app['dao.visitor'] = function ($app) {
+    return new GSB\DAO\VisitorDAO($app['db']);
 };
 

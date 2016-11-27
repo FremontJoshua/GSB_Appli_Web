@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8" />
     <link href="microcms.css" rel="stylesheet" />
-    <link href="http://127.0.0.1/SEG/v0/web/lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-    <title>Contexte SEG</title>
+    <link href="http://127.0.0.1/gsb_appli_web/v0/web/lib/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <title>Contexte GSB</title>
 </head>
 <body>
     <header>
@@ -18,14 +18,15 @@
         <span class="icon-bar"></span>
         <span class="icon-bar"></span>
       </button>
-      <a class="navbar-brand " href="#">SEG</a>
+      <a class="navbar-brand " href="#">GSB</a>
     </div>
     </header>
     <div class="container">
     <table border="1" class="table table-striped">
-    {% for commune in communes %}
+    {% for visitor in visitors %}
         <tr>
-            <td><a href="commune/{{ commune.id }}" >{{ commune.nom }}</a></td>
+            <td>{{ visitor.lastName }}</td>
+            <td>{{ visitor.firstName }}</td>
         </tr>
     {% endfor %}
     </table> 
