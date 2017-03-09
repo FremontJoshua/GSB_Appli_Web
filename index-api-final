@@ -1,0 +1,1565 @@
+<?php
+
+use RedBeanPHP\R;
+
+require_once 'vendor/autoload.php';
+
+//R::setup('mysql:host=mysql-adrienguillement.alwaysdata.net; dbname=adrienguillement_gsb', '113881_gsb', '1597536842');
+R::setup('mysql:host=localhost; dbname=gsb_v06', 'root', 'pwsio');
+
+$app = new \Slim\Slim();
+
+/**
+ * Routes pour fiche frais
+ */
+$app->group('/expensereport', function() use ($app) {
+
+    //diplay all fiches frais
+    $app->get('/all', function() {
+        $reports = R::getAll('SELECT * FROM expensereport');
+        //var_dump($reports);
+        echo json_encode($reports, JSON_UNESCAPED_UNICODE);
+    });
+
+    //display fiche frais by id
+    $app->get('/:id', function($id) {
+        $report = R::getAll('SELECT * FROM expensereport WHERE id = ' . $id);
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    //display one visitor by id
+    $app->get('/visitor/:visitor_id', function($visitor_id) {
+        $report = R::getAll('SELECT * FROM expensereport WHERE visitor_id = ' . $visitor_id . ' ORDER BY month_year DESC');
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/max/id', function() {
+        $report = R::getAll('SELECT MAX(id) as id FROM expensereport');
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    //display one report by date and visitor_id
+    $app->get('/dateAndVisitor/:date/:visitor_id', function($date, $visitor_id) {
+        $report = R::getAll('SELECT * FROM expensereport WHERE month_year = "' . $date . '" AND visitor_id = ' .$visitor_id);
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:date/:visitor_id/:nbHorsClassif/:montantHorsClassif', function($id, $date, $visitor_id, $nbHorsClassif, $montantHorsClassif) {
+        $report = R::load('expensereport', $id);
+        $report->month_year = $date;
+        $report->visitor_id = $visitor_id;
+        $report->nb_hors_classif = $nbHorsClassif;
+        $report->montant_hors_classif = $montantHorsClassif;
+        R::store($report);
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:date/:visitor_id/:nbHorsClassif/:montantHorsClassif', function($date, $visitor_id, $nbHorsClassif, $montantHorsClassif) {
+        $query = R::getAll('SELECT * FROM expensereport 
+                          WHERE month_year = :date
+                          AND visitor_id = :id
+                          AND nb_hors_classif = :nb
+                          AND montant_hors_classif= :montant',
+			   [':date' => $date,
+                    	    ':id' => $visitor_id,
+                            ':nb' => $nbHorsClassif,
+                            ':montant' => $montantHorsClassif]
+        );
+
+        if (empty($query)) {
+            $line = R::dispense('expensereport');
+            $line->month_year = $date;
+            $line->visitor_id = $visitor_id;
+            $line->nb_hors_classif = $nbHorsClassif;
+            $line->montant_hors_classif = $montantHorsClassif;
+            R::store($line);
+            echo json_encode($line, JSON_UNESCAPED_UNICODE);
+        } else {
+            echo NULL;
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM expensereport WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM expensereport WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes pour ligne frais
+ */
+$app->group('/expenseline', function() use ($app) {
+
+    //get all data from expenseLine table
+    $app->get('/all', function() {
+        $reportLines = R::getAll('SELECT * FROM expenseline');
+        echo json_encode($reportLines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //display ligne frais by id
+    $app->get('/:id', function($id) {
+        $reportLines = R::getAll('SELECT * FROM expenseline WHERE id = ' . $id);
+        echo json_encode($reportLines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get all lines of one expense report
+    $app->get('/oneReport/:report_id', function($report_id) {
+        $lines = R::getAll('SELECT * FROM expenseline WHERE expense_report_id = ' . $report_id);
+        echo json_encode($lines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get all lines of one expense report
+    $app->get('/oneReport/:report_id/count', function($report_id) {
+        $lines = R::getAll('SELECT COUNT(id) as Count FROM expenseline WHERE expense_report_id = ' . $report_id);
+        //var_dump($lines);
+        echo json_encode($lines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    //get all lines of one expense report
+    $app->get('/byReportAndType/:report_id/:type', function($report_id,$type) {
+        $lines = R::getAll('SELECT * FROM expenseline WHERE expense_report_id = ' . $report_id.' AND type = "'.$type.'"');
+        //var_dump($lines);
+        echo json_encode($lines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    //get lines for one report and by type
+    $app->get('/byReportAndType/:report_id/:type', function($report_id,$type) {
+        $lines = R::getAll('SELECT * FROM expenseline WHERE expense_report_id = ' . $report_id . ' AND type = "'.$type.'"');
+        echo json_encode($lines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //update of one expenseLine by id
+    $app->get('/update/:id/:type/:name/:expense_date/:amount/:expense_report_id', function($id, $type, $name, $expense_date, $amount, $expense_report_id) {
+        $line = R::load('expenseline', $id);
+        $line->type = $type;
+        $line->name = $name;
+        $line->expense_date = $expense_date;
+        $line->amount = $amount;
+        $line->expense_report_id = $expense_report_id;
+        R::store($line);
+        echo json_encode($line, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:type/:name/:date/:amount/:report_id', function($type, $name, $date, $amount, $report_id) {
+        $query = R::getAll('SELECT * FROM expenseline 
+                          WHERE type = :type
+                          AND name = :name
+                          AND expense_date = :date
+                          AND amount = :amount
+                          AND expense_report_id = :id',
+			   [':type' => $type,
+                    	    ':name' => $name,
+                            ':date' => $date,
+                            ':amount' => $amount,
+                            ':id' => $report_id]
+        );
+
+        if (empty($query)) {
+            $line = R::dispense('expenseline');
+            $line->type = $type;
+            $line->name = $name;
+            $line->expense_date = $date;
+            $line->amount = $amount;
+            $line->expense_report_id = $report_id;
+            R::store($line);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM expenseline WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM expenseline WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+
+    $app->get('/delete/byReport/:id', function($id) {
+        $query = R::getAll('SELECT * FROM expenseline WHERE expense_report_id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM expenseline WHERE expense_report_id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes pour follow
+ */
+$app->group('/follow', function() use ($app) {
+
+    //get all data from follow table
+    $app->get('/all', function() {
+        $follow = R::getAll('SELECT * FROM follow');
+        echo json_encode($follow, JSON_UNESCAPED_UNICODE);
+    });
+    //get data for one follow by ID
+    $app->get('/:id', function($id) {
+        $follow = R::getAll('SELECT * FROM follow WHERE id = ' . $id);
+        echo json_encode($follow, JSON_UNESCAPED_UNICODE);
+    });
+    
+    //get the most recent follow and situation of one report
+    $app->get('/report/recent/:id', function($id) {
+        $date = R::getAll('SELECT MAX(follow_date) FROM follow WHERE expense_report_id = '.$id);
+        $follow = R::getAll('SELECT * FROM follow WHERE expense_report_id = '.$id.' AND follow_date = "'.$date[0]['MAX(follow_date)'].'"');
+        echo json_encode($follow, JSON_UNESCAPED_UNICODE);
+    });
+    
+    //get the most recent follow and situation of one report
+    $app->get('/report/all/:id', function($id) {
+        $follow = R::getAll('SELECT * FROM follow WHERE expense_report_id = '.$id);
+        echo json_encode($follow, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:expense_report_id/:situation_id/:date', function($id, $expense_report_id, $situation_id, $date) {
+        $follow = R::load('follow', $id);
+        $follow->expense_line_id = $expense_report_id;
+        $follow->situation_id = $situation_id;
+        $follow->follow_date = $date;
+        R::store($follow);
+        echo json_encode($follow, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:expense_report_id/:situation_id/:date', function($expense_report_id, $situation_id, $date) {
+        $query = R::getAll('SELECT * FROM situation 
+                          WHERE expense_report_id = :report
+                          AND situation_id = :situation
+                          AND follow_date = :date', 
+                        [':report' => $expense_report_id,
+                         ':situation' =>$situation_id,
+                         ':date' => $date]);
+
+        if (empty($query)) {
+            $follow = R::dispense('follow');
+            $follow->expense_report_id = $expense_report_id;
+            $follow->situation_id = $situation_id;
+            $follow->follow_date = $date;
+            R::store($follow);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM follow WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM follow WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes pour situation
+ */
+$app->group('/situation', function() use ($app) {
+
+    //get all data from situation table
+    $app->get('/all', function() {
+        $situations = R::getAll('SELECT * FROM situation');
+        echo json_encode($situations, JSON_UNESCAPED_UNICODE);
+    });
+    //get data for one situation by ID
+    $app->get('/:id', function($id) {
+        $situation = R::getAll('SELECT * FROM situation WHERE id = ' . $id);
+        echo json_encode($situation, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/byName/:name', function($name) {
+        $situation = R::getAll('SELECT * FROM situation WHERE name = "' . $name . '"');
+        echo json_encode($situation, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:name', function($id, $name) {
+        $situation = R::load('situation', $id);
+        $situation->name = $name;
+        R::store($situation);
+        echo json_encode($situation, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:name', function($name) {
+        $query = R::getAll('SELECT * FROM situation 
+                          WHERE name = :name', [':name' => $name]);
+
+        if (empty($query)) {
+            $situation = R::dispense('situation');
+            $situation->name = $name;
+            R::store($situation);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM situation WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM situation WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes pour activités complémentaires
+ */
+$app->group('/additionalactivity', function() use ($app) {
+    //get all activities
+    $app->get('/all', function() {
+        $activites = R::getAll('SELECT * FROM additionalactivity');
+        echo json_encode($activites, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one activity by ID
+    $app->get('/:id', function($id) {
+        $activity = R::getAll('SELECT * FROM additionalactivity WHERE id = ' . $id);
+        echo json_encode($activity, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:date/:place/:theme/:amount', function($id, $date, $place, $theme,$amount) {
+        $activity = R::load('additionalactivity', $id);
+        $activity->activity_date = $date;
+        $activity->place = $place;
+        $activity->theme = $theme;
+        $activity->amount = $amount;
+        R::store($activity);
+        echo json_encode($activity, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/max/id', function() {
+        $report = R::getAll('SELECT MAX(id) as id FROM additionalactivity');
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    //add an activity in additionalactivity with parameters
+    $app->get('/add/:date/:place/:theme/:amount', function($date, $place, $theme,$amount) {
+        $query = R::getAll('SELECT * FROM additionalactivity 
+                              WHERE activity_date = :date
+                              AND place = :place
+                              AND theme = :theme
+                              AND amount = :amount',
+			   	[':date' => $date,
+                    		':place' => $place,
+                    		':theme' => $theme,
+                    		':amount' => $amount]
+        );
+        if(empty($query)) {
+            $activity = R::dispense('additionalactivity');
+            $activity->activity_date = $date;
+            $activity->place = $place;
+            $activity->theme = $theme;
+            $activity->amount = $amount;
+            R::store($activity);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM additionalactivity WHERE id = ' . $id);
+
+        if (!empty($query)) {
+            R::getAll('DELETE FROM additionalactivity WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes pour les visiteurs
+ */
+$app->group('/visitor', function() use ($app) {
+	
+	$app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM visitor WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('UPDATE visitor SET visible = 0 WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+	
+    //get all visitor
+    $app->get('/all', function() {
+        $visitors = R::getAll('SELECT * FROM visitor');
+        echo json_encode($visitors, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one visitor by id
+    $app->get('/:id', function($id) {
+        $visitor = R::getAll('SELECT * FROM visitor WHERE id = ' . $id);
+        echo json_encode($visitor, JSON_UNESCAPED_UNICODE);
+    });
+    
+    //get one doctor by name and address
+    $app->get('/byNameAddress/:last_name/:first_name/:address', function($last_name,$first_name,$address) {
+        $visitor = R::getAll('SELECT * FROM visitor WHERE last_name = "'.$last_name.'" AND first_name = "'.$first_name.'" AND address = "'.urldecode($address).'"');
+        echo json_encode($visitor, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one visitor by name
+    $app->get('/:last_name/:first_name', function($last_name, $first_name) {
+        $visitor = R::findOne('visitor', 'last_name = :last_name AND first_name = :first_name', array(':last_name' => $last_name, ':first_name' => $first_name));
+        echo json_encode($visitor, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/by/member/:member_id', function($member_id) {
+        $visitor = R::findOne('visitor', 'member_id = ?', array(intval($member_id)));
+        echo json_encode($visitor, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get departement of a visitor by id
+    $app->get('/departement/:id', function($id) {
+        $visitors = R::getAll('SELECT * FROM visitor WHERE departement_id = ' . $id);
+        echo json_encode($visitors, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:lastName/:firstName/:address/:recrutementDate/:departement_id/:member_id', function($id, $lastName, $firstName, $address, $recrutementDate, $departement_id, $member_id) {
+        $visitor = R::load('visitor', $id);
+        $visitor->last_name = $lastName;
+        $visitor->first_name = $firstName;
+        $visitor->address = $address;
+        $visitor->recruitment_date = $recrutementDate;
+        $visitor->departement_id = $departement_id;
+        $visitor->member_id = $member_id;
+        R::store($visitor);
+       	echo json_encode(['message' => 'Success']);
+    });
+
+    //add new visitor un table visitor
+    $app->get('/add/:last_name/:first_name/:address/:recruitment_date/:departement_id/:member_id', 
+			function($last_name, $first_name, $address, $recruitment_date, $departement_id, $member_id) {
+
+		$query = R::getAll('SELECT *
+                            FROM visitor
+                            WHERE last_name = :last_name
+                            AND first_name = :first_name
+                            AND address = :address
+                            AND recruitment_date = :recruitment_date
+                            AND departement_id = :departement_id
+							AND member_id = :member_id', 
+							[':last_name' => $last_name,
+                    ':first_name' => $first_name,
+                    ':address' => $address,
+                    ':recruitment_date' => date('Y-m-d', strtotime($recruitment_date)),
+                    ':departement_id' => $departement_id,
+                    ':member_id' => $member_id]
+        );
+
+        if (empty($query)) {
+            $visitor = R::dispense('visitor');
+            $visitor->last_name = $last_name;
+            $visitor->first_name = $first_name;
+            $visitor->address = $address;
+            $visitor->recruitment_date = date('Y-m-d', strtotime($recruitment_date));
+            $visitor->departement_id = $departement_id;
+            $visitor->member_id = $member_id;
+            R::store($visitor);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+
+});
+
+/**
+ * Routes pour la table work
+ */
+$app->group('/work', function() use ($app) {
+    //get all data from region table
+    $app->get('/all', function() {
+        $work = R::getAll('SELECT * FROM work');
+        echo json_encode($work, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get work by id
+    $app->get('/:id', function($id) {
+        $work = R::getAll('SELECT * FROM work WHERE id = ' . $id);
+        echo json_encode($work, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get work of a visitor
+    $app->get('/visitor/:id', function($id) {
+        $work = R::getAll('SELECT * FROM work WHERE visitor_id = ' . $id);
+        echo json_encode($work, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:region_id/:visitor_id/:start_date/:end_date', function($id, $region_id, $visitor_id, $start_date, $end_date) {
+        $work = R::load('work', $id);
+        $work->region_id = $region_id;
+        $work->visitor_id = $visitor_id;
+        $work->start_date = $start_date;
+        $work->end_date = $end_date;
+        R::store($work);
+        echo json_encode($work, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:region_id/:visitor_id/:start_date/:end_date', function($region_id, $visitor_id, $start_date, $end_date) {
+        $query = R::getAll('SELECT * FROM work 
+                          WHERE region_id = :region_id
+                          AND visitor_id = :visitor_id
+                          AND start_date = :start_date
+                          AND end_date= :end_date', 
+			   [':region_id' => $region_id,
+                    		':visitor_id' => $visitor_id,
+                    		':start_date' => $start_date,
+                    		':end_date' => $end_date]
+        );
+
+        if (empty($query)) {
+            $work = R::dispense('work');
+            $work->region_id = $region_id;
+            $work->visitor_id = $visitor_id;
+            $work->start_date = $start_date;
+            $work->end_date = $end_date;
+            R::store($work);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM work WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM work WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des régions
+ */
+$app->group('/region', function() use ($app) {
+
+    //get all data from region table
+    $app->get('/all', function() {
+        $region = R::getAll('SELECT * FROM region');
+        echo json_encode($region, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one region by ID
+    $app->get('/:id', function($id) {
+        $region = R::getAll('SELECT * FROM region WHERE id = ' . $id);
+        echo json_encode($region, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:name/:sector_id', function($id, $name, $sector_id) {
+        $region = R::load('region', $id);
+        $region->name = $name;
+        $region->sector_id = $sector_id;
+        R::store($region);
+        echo json_encode($region, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:name/:sector_id', function($name, $sector_id) {
+        $query = R::getAll('SELECT * FROM region 
+                          WHERE name = :name
+                          AND sector_id = :sector_id', [':name' => $name,
+                    ':sector_id' => $sector_id]
+        );
+
+        if (empty($query)) {
+            $region = R::dispense('region');
+            $region->name = $name;
+            $region->sector_id = $sector_id;
+            R::store($region);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM region WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM region WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des secteurs
+ */
+$app->group('/sector', function() use ($app) {
+
+    //get all data from sector table
+    $app->get('/all', function() {
+        $sector = R::getAll('SELECT * FROM sector');
+        echo json_encode($sector, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one sector by id
+    $app->get('/:id', function($id) {
+        $sector = R::getAll('SELECT * FROM sector WHERE id = ' . $id);
+        echo json_encode($sector, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:name', function($id, $name) {
+        $sector = R::load('sector', $id);
+        $sector->name = $name;
+        R::store($sector);
+        echo json_encode($sector, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:name', function($name, $sector_id) {
+        $query = R::getAll('SELECT * FROM sector 
+                          WHERE name = :name', [':name' => $name]);
+
+        if (empty($query)) {
+            $sector = R::dispense('sector');
+            $sector->name = $name;
+            R::store($sector);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM sector WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM sector WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des départements
+ */
+$app->group('/departement', function() use ($app) {
+
+    //get all data from departement
+    $app->get('/all', function() {
+        $departement = R::getAll('SELECT * FROM departement');
+        echo json_encode($departement, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one departement by id
+    $app->get('/:id', function($id) {
+        $departement = R::getAll('SELECT * FROM departement WHERE id = ' . $id);
+        echo json_encode($departement, JSON_UNESCAPED_UNICODE);
+    });
+
+    //update of one departement
+    $app->get('/update/:id/:name/:sale_chief', function($id, $name, $sale_chief) {
+        $departement = R::load('departement', $id);
+        $departement->name = $name;
+        $departement->sale_chief = $sale_chief;
+        R::store($departement);
+        echo json_encode($departement, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:name/:sale_chief', function($name, $sale_chief) {
+        $query = R::getAll('SELECT * FROM departement 
+                          WHERE name = :name
+                          AND sale_chief = :sale_chief', [':name' => $name,
+                    ':sale_chief' => $sale_chief]
+        );
+
+        if (empty($query)) {
+            $region = R::dispense('departement');
+            $region->name = $name;
+            $region->sale_chief = $sale_chief;
+            R::store($region);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    //delete of one departement by id
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM departement WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM departement WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des médicaments
+ */
+$app->group('/medicines', function() use ($app) {
+
+    //get data from medicines table
+    $app->get('/all', function() {
+        $medicines = R::getAll('SELECT * FROM medicines ORDER BY commercial_name');
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one medicine with id
+    $app->get('/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM medicines WHERE id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:effects/:contraindication/:family_id/:commercial_name/:sample_price', function($id, $effects, $contraindication, $family_id, $commercial_name, $sample_price) {
+        $medicine = R::load('medicines', $id);
+        $medicine->effects = $effects;
+        $medicine->contraindication = $contraindication;
+        $medicine->family_id = $family_id;
+        $medicine->commercial_name = $commercial_name;
+        $medicine->sample_price = $sample_price;
+        R::store($medicine);
+        echo json_encode($medicine, JSON_UNESCAPED_UNICODE);
+    });
+
+    //add new medicines in table
+    $app->get('/add/:name/:effects/:contreindication/:price/:family_id', function($name, $effects, $contreindication, $price, $family_id) {
+        $query = R::getAll('SELECT *
+                            FROM medicines
+                            WHERE commercial_name = :name
+                            AND effects = :effects
+                            AND contraindication = :contraindication
+                            AND sample_price = :price
+                            AND family_id = :family_id', 
+			   	[':name' => $name,
+                    		':effects' => $effects,
+                   		 ':contraindication' => $contreindication,
+                   		 ':price' => $price,
+                   		 ':family_id' => $family_id]
+        );
+        if (empty($query)) {
+            $medicine = R::dispense('medicines');
+            $medicine->commercial_name = $name;
+            $medicine->effects = $effects;
+            $medicine->contraindication = $contreindication;
+            $medicine->sample_price = $price;
+            $medicine->family_id = $family_id;
+            R::store($medicine);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM medicines WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM medicines WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des offer
+ */
+$app->group('/offer', function() use ($app) {
+
+    //all datas from the table offer
+    $app->get('/all', function() {
+        $medicines = R::getAll('SELECT * FROM offer');
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one offer with id
+    $app->get('/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM offer WHERE id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/max/id', function() {
+        $offer = R::getAll('SELECT MAX(id) as id FROM offer');
+        echo json_encode($offer, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/report/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM offer WHERE report_id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/medicines/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM offer WHERE medicines_id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/report/:id/notIn/:array', function($id,$array) {
+        $medicines = R::getAll('SELECT * FROM offer WHERE report_id = '.$id.' AND id NOT IN ' . $array);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:report_id/:medicines_id/:quantity', function($id, $report_id, $medicines_id, $quantity) {
+        $medicine = R::load('offer', $id);
+        $medicine->report_id = $report_id;
+        $medicine->medicines_id = $medicines_id;
+        $medicine->quantity = $quantity;
+        R::store($medicine);
+        echo json_encode($medicine, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:report_id/:medicine_id/:quantity', function($report_id, $medicine_id, $quantity) {
+
+        $query = R::getAll('SELECT *
+                            FROM offer
+                            WHERE report_id = :report_id
+                            AND medicines_id = :medicine_id
+                            AND quantity = :quantity', 
+			    [':report_id' => $report_id,
+                    	    ':medicine_id' => $medicine_id,
+                            ':quantity' => $quantity]
+        );
+        if (empty($query)) {
+            $medicine = R::dispense('offer');
+            $medicine->report_id = $report_id;
+            $medicine->medicines_id = $medicine_id;
+            $medicine->quantity = $quantity;
+            R::store($medicine);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM offer WHERE id = ' . $id);
+
+        if (empty($query)) {
+            R::getAll('DELETE FROM offer WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+    
+    $app->get('/delete/byReport/:id', function($id) {
+        $query = R::getAll('SELECT * FROM offer WHERE report_id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM offer WHERE report_id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des interactions
+ */
+$app->group('/interact', function() use ($app) {
+
+    //all datas from the table offer
+    $app->get('/all', function() {
+        $medicines = R::getAll('SELECT * FROM interact');
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one offer with id
+    $app->get('/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM interact WHERE id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/byDisturbed/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM interact WHERE medicines_disturbed_id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:medicines_disturbed_id/:medicines_disturber_id', function($id, $medicines_disturbed_id, $medicines_disturber_id) {
+        $medicine = R::load('interact', $id);
+        $medicine->medicines_disturbed_id = $medicines_disturbed_id;
+        $medicine->medicines_disturber_id = $medicines_disturber_id;
+        R::store($medicine);
+        echo json_encode($medicine, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:medicines_disturbed_id/:medicines_disturber_id', function($medicines_disturbed_id, $medicines_disturber_id) {
+
+        $query = R::getAll('SELECT *
+                            FROM interact
+                            WHERE medicines_disturbed_id = :report_id
+                            AND medicines_disturber_id = :medicine_id',
+			    [':medicines_disturbed_id' => $medicines_disturbed_id,
+                    	    ':medicines_disturber_id' => $medicines_disturber_id]
+        );
+        if (empty($query)) {
+            $medicine = R::dispense('interact');
+            $medicine->medicines_disturbed_id = $medicines_disturbed_id;
+            $medicine->medicines_disturber_id = $medicines_disturber_id;
+            R::store($medicine);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM interact WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM interact WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des familles de médicaments
+ */
+$app->group('/family', function() use ($app) {
+    //get data from family table
+    $app->get('/all', function() {
+        $medicines = R::getAll('SELECT * FROM family');
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one family by id
+    $app->get('/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM family WHERE id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:name', function($id, $name) {
+        $family = R::load('family', $id);
+        $family->name = $name;
+        R::store($family);
+        echo json_encode($family, JSON_UNESCAPED_UNICODE);
+    });
+
+    //add new family type
+    $app->get('/add/:name', function($name) {
+        $query = R::getAll('SELECT *
+                            FROM family
+                            WHERE name = :name', 
+			   [':name' => $name]
+        );
+        if (empty($query)) {
+            $family = R::dispense('family');
+            $family->name = $name;
+            R::store($family);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM family WHERE id = ' . $id);
+
+        if (empty($query)) {
+            R::getAll('DELETE FROM family WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+
+/**
+ * Routes des realise 
+ */
+$app->group('/realise', function() use ($app) {
+    //get data from family table
+    $app->get('/all', function() {
+        $medicines = R::getAll('SELECT * FROM realise');
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one family by id
+    $app->get('/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM realise WHERE id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/byVisitor/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM realise WHERE visitor_id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/byActivity/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM realise WHERE additional_activity_id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/activity/visitor/:activity_id/:visitor_id', function($activity_id,$visitor_id) {
+        $medicines = R::getAll('SELECT * FROM realise WHERE additional_activity_id = ' . intval($activity_id).' AND visitor_id = '.intval($visitor_id));
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/max/id', function() {
+        $report = R::getAll('SELECT MAX(id) as id FROM realise');
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/report/:id/notIn/:string', function($id,$string) {
+        $medicines = R::getAll('SELECT * FROM realise WHERE additional_activity_id = '.$id.' AND id NOT IN ' . $string);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+
+    $app->get('/update/:id/:activity_id/:visitor_id', function($id, $activity_id, $visitor_id) {
+        $family = R::load('realise', $id);
+        $family->additional_activity_id = $activity_id;
+        $family->visitor_id = $visitor_id;
+        R::store($family);
+        echo json_encode($family, JSON_UNESCAPED_UNICODE);
+    });
+
+    //add new family type
+    $app->get('/add/:activity_id/:visitor_id', function($activity_id, $visitor_id) {
+        $query = R::getAll('SELECT *
+                            FROM realise
+                            WHERE additional_activity_id = :activity 
+                            AND visitor_id = :visitor', 
+			   [':activity' => $activity_id,
+			    ':visitor' => $visitor_id]
+        );
+        if (empty($query)) {
+            $family = R::dispense('realise');
+            $family->additional_activity_id = $activity_id;
+            $family->visitor_id = $visitor_id;
+            R::store($family);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM realise WHERE id = ' . $id);
+
+        if (!empty($query)) {
+            R::getAll('DELETE FROM realise WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+    
+    $app->get('/delete/byActivity/:id', function($id) {
+        $query = R::getAll('SELECT * FROM realise WHERE additional_activity_id = ' . $id);
+
+        if (!empty($query)) {
+            R::getAll('DELETE FROM realise WHERE additional_activity_id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+
+/**
+ * Routes des invitations aux activités 
+ */
+$app->group('/invite', function() use ($app) {
+    //get data from family table
+    $app->get('/all', function() {
+        $medicines = R::getAll('SELECT * FROM invite');
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one family by id
+    $app->get('/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM invite WHERE id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/byDoctor/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM invite WHERE doctor_id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/byActivity/:id', function($id) {
+        $medicines = R::getAll('SELECT * FROM invite WHERE additional_activity_id = ' . $id);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/max/id', function() {
+        $report = R::getAll('SELECT MAX(id) as id FROM invite');
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/report/:id/notIn/:string', function($id,$string) {
+        $medicines = R::getAll('SELECT * FROM invite WHERE additional_activity_id = '.$id.' AND id NOT IN ' . $string);
+        echo json_encode($medicines, JSON_UNESCAPED_UNICODE);
+    });
+
+
+    $app->get('/update/:id/:activity_id/:doctor_id', function($id, $activity_id, $doctor_id) {
+        $family = R::load('invite', $id);
+        $family->additional_activity_id = $activity_id;
+        $family->doctor_id = $doctor_id;
+        R::store($family);
+        echo json_encode($family, JSON_UNESCAPED_UNICODE);
+    });
+
+    //add new family type
+    $app->get('/add/:activity_id/:doctor_id', function($activity_id, $doctor_id) {
+        $query = R::getAll('SELECT *
+                            FROM invite
+                            WHERE additional_activity_id = :activity 
+                            AND doctor_id = :doctor', 
+			   [':activity' => $activity_id,
+			    ':doctor' => $doctor_id]
+        );
+        if (empty($query)) {
+            $family = R::dispense('invite');
+            $family->additional_activity_id = $activity_id;
+            $family->doctor_id = $doctor_id;
+            R::store($family);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM invite WHERE id = ' . $id);
+
+        if (!empty($query)) {
+            R::getAll('DELETE FROM invite WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+    
+    $app->get('/delete/byActivity/:id', function($id) {
+        $query = R::getAll('SELECT * FROM invite WHERE additional_activity_id = ' . $id);
+
+        if (!empty($query)) {
+            R::getAll('DELETE FROM invite WHERE additional_activity_id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des praticiens
+ */
+$app->group('/doctor', function() use ($app) {
+    //get all data from doctor
+    $app->get('/all', function() {
+        $doctors = R::getAll('SELECT * FROM doctor');
+        echo json_encode($doctors, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one doctor by id
+    $app->get('/:id', function($id) {
+        $doctors = R::getAll('SELECT * FROM doctor WHERE id = ' . $id);
+        echo json_encode($doctors, JSON_UNESCAPED_UNICODE);
+    });
+    
+    //get one doctor by name and address
+    $app->get('/byNameAddress/:last_name/:first_name/:address', function($last_name,$first_name,$address) {
+        $doctors = R::getAll('SELECT * FROM doctor WHERE last_name = "'.$last_name.'" AND first_name = "'.$first_name.'" AND address = "'.urldecode($address).'"');
+        echo json_encode($doctors, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:lastName/:firstName/:address/:notoriety_coef/:postcode/:type_id', function($id, $lastName, $firstName, $address, $notoriety_coef, $postcode, $type_id) {
+        $doctor = R::load('doctor', $id);
+        $doctor->last_name = $lastName;
+        $doctor->first_name = $firstName;
+        $doctor->address = $address;
+        $doctor->notoriety_coef = $notoriety_coef;
+        $doctor->postcode = $postcode;
+        $doctor->type_id = $type_id;
+        R::store($doctor);
+        echo json_encode($doctor, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:last_name/:first_name/:address/:notoriety_coef/:postcode/:type_id', function($lastName, $firstName, $address, $notoriety_coef, $postcode, $type_id) {
+        $query = R::getAll('SELECT * FROM doctor 
+                          WHERE last_name = :last_name
+                          AND first_name = :first_name
+                          AND address = :address
+                          AND notoriety_coef = :notoriety_coef
+                          AND postcode = :postcode
+			  AND type_id = :type_id', 
+			   [':last_name' => $last_name,
+                           ':first_name' => $firstName,
+                           ':address' => $address,
+                           ':notoriety_coef' => $notoriety_coef,
+                           ':postcode' => $postcode,
+                           ':type_id' => $type_id]
+        );
+
+        if (empty($query)) {
+            $doctor = R::dispense('doctor');
+            $doctor->last_name = $lastName;
+            $doctor->first_name = $firstName;
+            $doctor->address = $address;
+            $doctor->notoriety_coef = $notoriety_coef;
+            $doctor->postcode = $postcode;
+            $doctor->type_id = $type_id;
+            R::store($doctor);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM doctor WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM doctor WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des types de docteurs
+ */
+$app->group('/doctortype', function() use ($app) {
+    //get all type of doctor
+    $app->get('/all', function() {
+        $doctors = R::getAll('SELECT * FROM doctortype');
+        echo json_encode($doctors, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one type by id
+    $app->get('/:id', function($id) {
+        $doctors = R::getAll('SELECT * FROM doctortype WHERE id = ' . $id);
+        echo json_encode($doctors, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:name/:place', function($id, $name, $place) {
+        $type = R::load('doctortype', $id);
+        $type->name = $name;
+        $type->place = $place;
+        R::store($type);
+        echo json_encode($type, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:name/:place', function($name, $place) {
+        $query = R::getAll('SELECT * FROM doctortype 
+                          WHERE name = :name
+                          AND place = :place', 
+			   [':name' => $name,
+                            ':place' => $place]
+        );
+
+        if (empty($query)) {
+            $doctor = R::dispense('doctortype');
+            $doctor->name = $name;
+            $doctor->place = $place;
+            R::store($doctor);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM doctortype WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM doctortype WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+/**
+ * Routes des comptes-rendus
+ */
+$app->group('/report', function() use ($app) {
+    //get all reports
+    $app->get('/all', function() {
+        $reports = R::getAll('SELECT * FROM report');
+        echo json_encode($reports, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one report by id
+    $app->get('/:id', function($id) {
+        $report = R::getAll('SELECT * FROM report WHERE id = ' . $id);
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+    
+    $app->get('/max/id', function() {
+        $report = R::getAll('SELECT MAX(id) as id FROM report');
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    //display reports by id visitor
+    $app->get('/visitor/:visitor_id', function($visitor_id) {
+        $report = R::getAll('SELECT * FROM report WHERE visitor_id = ' . $visitor_id . ' ORDER BY report_date DESC');
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get all report of one doctor with doctor_id
+    $app->get('/doctor/:id', function($id) {
+        $report = R::find('report', 'doctor_id = ?', array($id));
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:visitor_id/:date/:place/:reason/:conclusion/:doctor_id', function($id, $visitor_id, $date, $place, $reason, $conclusion, $doctor_id) {
+        $report = R::load('report', $id);
+        $report->visitor_id = $visitor_id;
+        $report->report_date = $date;
+        $report->place = $place;
+        $report->reason = $reason;
+        $report->conclusion = $conclusion;
+        $report->doctor_id = $doctor_id;
+        R::store($report);
+        echo json_encode($report, JSON_UNESCAPED_UNICODE);
+    });
+
+    //add new report un report table
+    $app->get('/add/:visitor_id/:date/:place/:reason/:conclusion/:doctor_id', function($visitor_id, $date, $place, $reason, $conclusion, $doctor_id) {
+        $query = R::getAll('SELECT *
+                            FROM report
+                            WHERE visitor_id = :visitor_id
+                            AND report_date = :date
+                            AND place = :place
+                            AND reason = :reason
+                            AND conclusion = :conclusion
+                            AND doctor_id = :doctor_id', 
+			   [':visitor_id' => $visitor_id,
+                    	    ':date' => $date,
+                            ':place' => $place,
+                            ':reason' => $reason,
+                            ':conclusion' => $conclusion,
+                            ':doctor_id' => $doctor_id]
+        );
+        if (empty($query)) {
+            $report = R::dispense('report');
+            $report->visitor_id = $visitor_id;
+            $report->report_date = $date;
+            $report->place = $place;
+            $report->reason = $reason;
+            $report->conclusion = $conclusion;
+            $report->doctor_id = $doctor_id;
+            R::store($report);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already exist']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM report WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM report WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+
+    $app->get('/delete/byVisitor/:id', function($id) {
+        $query = R::getAll('SELECT * FROM report WHERE visitor_id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM report WHERE visitor_id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+$app->group('/member', function() use ($app) {
+    //get all members
+    $app->get('/all', function() {
+        $members = R::getAll('SELECT * FROM member');
+        echo json_encode($members, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one member by id
+    $app->get('/:id', function($id) {
+        $member = R::getAll('SELECT * FROM member WHERE id = ' . $id);
+        echo json_encode($member, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get all members of one group with group_id
+    $app->get('/group/:id', function($id) {
+        $members = R::find('member', 'group_id = ?', array($id));
+        echo json_encode($members, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/connexion/:mail/:pass', function($mail, $pass) {
+        $query = R::getAll('SELECT * FROM member WHERE mail = "' . $mail . '" AND pass ="' . sha1('e*?g^*~Ga7' . $pass . '9!cF;.!Y)?') . '"');
+        if (empty($query)) {
+            echo NULL;
+        } else {
+            echo json_encode($query, JSON_UNESCAPED_UNICODE);
+        }
+    });
+
+    $app->get('/update/:id/:last_name/:first_name/:pass/:mail/:inscriptionDate/:groupID', function($id, $last_name, $first_name, $pass, $mail, $inscriptionDate, $groupID) {
+        $member = R::load('member', $id);
+        $member->last_name = $last_name;
+        $member->first_name = $first_name;
+        $member->pass = sha1('e*?g^*~Ga7' . $pass . '9!cF;.!Y)?');
+        $member->mail = $mail;
+        $member->date_inscription = $inscriptionDate;
+        $member->groupe_id = $groupID;
+        R::store($member);
+        echo json_encode($member, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:last_name/:first_name/:pass/:mail/:inscriptionDate/:groupID', function($last_name, $first_name, $pass, $mail, $inscriptionDate, $groupID) {
+        $query = R::getAll('SELECT *
+                            FROM member
+                            WHERE mail = :mail', 
+			   [':mail' => $mail]);
+
+        if (empty($query)) {
+            $report = R::dispense('member');
+            $report->last_name = $last_name;
+            $report->first_name = $first_name;
+            $report->pass = sha1('e*?g^*~Ga7' . $pass . '9!cF;.!Y)?');
+            $report->mail = $mail;
+            $report->date_inscription = $inscriptionDate;
+            $report->groupe_id = $groupID;
+            R::store($report);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, mail already used']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM member WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM member WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+$app->group('/membergroup', function() use ($app) {
+    //get all members
+    $app->get('/all', function() {
+        $members = R::getAll('SELECT * FROM membergroup');
+        echo json_encode($members, JSON_UNESCAPED_UNICODE);
+    });
+
+    //get one member by id
+    $app->get('/:id', function($id) {
+        $member = R::getAll('SELECT * FROM membergroup WHERE id = ' . $id);
+        echo json_encode($member, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/all/noAdmin', function() {
+        $members = R::getAll('SELECT * FROM membergroup WHERE name != "administrateur"');
+        echo json_encode($members, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/update/:id/:name', function($id, $name) {
+        $member = R::load('membergroup', $id);
+        $member->name = $name;
+        R::store($member);
+        echo json_encode($member, JSON_UNESCAPED_UNICODE);
+    });
+
+    $app->get('/add/:name', function($name) {
+        $query = R::getAll('SELECT * FROM membergroup 
+                          WHERE name = :name', [':name' => $name]);
+
+        if (empty($query)) {
+            $member = R::dispense('membergroup');
+            $member->name = $name;
+            R::store($member);
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, query already insert']);
+        }
+    });
+
+    $app->get('/delete/:id', function($id) {
+        $query = R::getAll('SELECT * FROM membergroup WHERE id = ' . $id);
+
+        if ($query) {
+            R::getAll('DELETE FROM membergroup WHERE id = ' . $id);
+
+            echo json_encode(['message' => 'Success']);
+        } else {
+            echo json_encode(['message' => 'Error, this line doesn\'t exist']);
+        }
+    });
+});
+
+$app->run();
